@@ -1,0 +1,25 @@
+This is a mirror of http://www.vim.org/scripts/script.php?script_id=3684
+
+project on bitbucket: http://bitbucket.org/abadcafe/ctags_cache/
+
+ctags_cache is a vim plugin which can generate tags for C language uses ctags, then cache the tags in memory.
+
+Thus, you don't need any tags file!
+
+The plugin will update the cache while you call the :w command. Moreover, the header files which include by you current editing file will send to ctags too. Because ctags parse local variables not very good, so the plugin do the works itself(use regular expression.), it can extract local variables and function arguments exactly.
+
+It is excellent, isn't it? The story is not end, thanks to python, the plugin uses threads so you almost can not feel the delay caused by parsing files when you coding!
+
+Command
+
+:SetIncludeList path-of-include-dir1 path-of_include-dir2 ...
+
+:SetIncludeList
+
+the command with no arguments sets no Include dir, thus only header files in the dir of current file will be parsed.
+
+Todo
+
+Now only utf-8 encoding is support. Will add other encodings.
+
+And, the plugin is not test in windows, I guess it can work.

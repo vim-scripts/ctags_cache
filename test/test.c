@@ -67,6 +67,11 @@ typedef struct test4
     {
         union
         {
+            int kkk;
+            int nnn;
+        };
+        union
+        {
             int ttt;
             int sss;
         }u;

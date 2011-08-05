@@ -13,9 +13,9 @@ __all__ = [
     'find_completion_matches',
 ]
 
-COMPLETION_RE_OBJ = re.compile(r"(?:\w+\s*(?:\[\d*\])*\s*(?:\.|->)\s*)*(\w*)$")
+COMPLETION_RE_OBJ = re.compile(r"(?:\w+\s*(?:\[.*\])*\s*(?:\.|->)\s*)*(\w*)$")
 
-COMPLETION_COMPONENT_RE_OBJ = re.compile(r"(\w+)\s*(?:\[\d*\])*\s*(?:\.|->)\s*")
+COMPLETION_COMPONENT_RE_OBJ = re.compile(r"(\w+)\s*(?:\[.*\])*\s*(?:\.|->)\s*")
 
 FUNCTION_RE_OBJ = re.compile(r"""(?:static\s+)?
                                  (?:const\s+)?
@@ -36,11 +36,11 @@ VARIABLE_RE_OBJ = re.compile(r"""(?:static\s+)?
                                  (?:(struct|union|enum|(?:(?:signed|unsigned)(?:\s+long)?))\s+)?
                                  (\w+)                                       # variable type
                                  ([\s\*]+(?:const\s+)?\w+\s*                 # variable name
-                                  (?:\[\d*\]\s*)*                            # is it an array?
+                                  (?:\[.*\]\s*)*                             # is it an array?
                                   (?:=[^;]*)?                                # may have initial value.
                                   (?:,                                       # multiply variables definition.
                                      [\s\*]*(?:const\s+)?\w+\s*
-                                     (?:\[\d*\]\s*)*
+                                     (?:\[.*\]\s*)*
                                      (?:=[^;]*)?)*)
                                  ;""",
                              re.X|re.S)
@@ -221,7 +221,7 @@ def get_local_vars(name_prefix, match_whole = 0):
 def get_global_symbols(name_prefix):
     return CTAGS_CACHE.find_tags(name_prefix)
 
-def find_type_of_typedef(typedef):
+def find_typeref_of_typedef(typedef):
     """
     translate typedefed type to original typeref.
     if original typeref is not struct or union, it will return string ''.
@@ -259,6 +259,31 @@ def typeref_to_struct_name(typeref):
 
     return kind + sep + "::".join(name)
 
+def is_not_member_of_named_child_struct(tag, struct_name, struct_tags):
+    kind = None
+    if 'struct' in tag:
+        kind = 'struct'
+    elif 'union' in tag:
+        kind = 'union'
+
+    # unlikely.
+    else:
+        return 0
+    
+    # tag is member of struct.
+    if tag[kind] == struct_name:
+        return 1
+
+    for t2 in struct_tags:
+        if tag == t2 or 'typeref' not in t2:
+            continue
+
+        # the parent struct found, tag is not member of struct.
+        if kind + ':' + tag[kind] == typeref_to_struct_name(t2['typeref']):
+            return 0
+
+    return 1
+
 def find_completion_matches(completion, base):
     if completion != base:
         it = COMPLETION_COMPONENT_RE_OBJ.finditer(completion)
@@ -266,6 +291,7 @@ def find_completion_matches(completion, base):
         last_component_start = 0
         for part in it:
             tags = None
+            anon_struct = 0
             if not last_struct:
                 tags = [ t for t in get_local_vars(part.group(1), 1) if 'typeref' in t ]
                 if not tags:
@@ -273,20 +299,23 @@ def find_completion_matches(completion, base):
                     tags = [ t for t in tags if t['kind'] == 'v' and 'typeref' in t ]
             else:
                 kind, sep, name = last_struct.partition(':')
-                tags = CTAGS_CACHE.find_tags(name + '::' + part.group(1), 1)
-                tags = [ t for t in tags if t['kind'] == 'm' and 'typeref' in t ]
+                tags = CTAGS_CACHE.find_tags(name + '::')
+                tags = [ t for t in tags if t['kind'] == 'm' and 'typeref' in t \
+                         and t['name'].rpartition('::')[2] == part.group(1) \
+                         and is_not_member_of_named_child_struct(t, name, tags) ]
 
             # no tags found, stop.
             if not tags:
                 return []
 
             # if there are more than one tags, just use the first one.
-            tag = tags[0]
-            if tag['typeref'].startswith("struct:") \
-			   or tag['typeref'].startswith("union:"):
-                typeref = tag['typeref']
+            t = tags[0]
+            if t['typeref'].startswith("struct:") \
+               or t['typeref'].startswith("union:"):
+                typeref = t['typeref']
             else:
-                typeref = find_type_of_typedef(tag['typeref'])
+                typeref = find_typeref_of_typedef(t['typeref'])
+                # if typeref can not convert to a struct or union, stop.
                 if not typeref:
                     return []
 
@@ -295,10 +324,11 @@ def find_completion_matches(completion, base):
 
         last_component = completion[last_component_start:]
         kind, sep, name = last_struct.partition(':')
-        tags = CTAGS_CACHE.find_tags(name + '::' + last_component)
-        tags = [ t for t in tags if t['kind'] in 'mp' and kind in t
-                 and t[kind] == name ]
-       
+        tags = CTAGS_CACHE.find_tags(name + '::')
+        tags = [ t for t in tags if t['kind'] in 'mp' \
+                 and t['name'].rpartition('::')[2].startswith(last_component) \
+                 and is_not_member_of_named_child_struct(t, name, tags) ]
+
         return tags
 
     else:

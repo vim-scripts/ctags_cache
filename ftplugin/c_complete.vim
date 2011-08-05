@@ -1,10 +1,15 @@
 if v:version < 703
-    echo "Error: Required vim version >= 7.3"
+    echomsg "Error: Required vim version >= 7.3"
     finish
 end
 
 if !has('python3')
-    echo "Error: Required vim compiled with +python3"
+    echomsg "Error: Required vim compiled with python3"
+    finish
+endif
+
+if !executable('ctags')
+    echomsg "Error: Required ctags"
     finish
 endif
 

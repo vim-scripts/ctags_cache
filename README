@@ -20,6 +20,4 @@ the command with no arguments sets no Include dir, thus only header files in the
 
 Todo
 
-Now only utf-8 encoding is support. Will add other encodings.
-
-And, the plugin is not test in windows, I guess it can work.
+The plugin is not test in windows, I guess it can work.

@@ -64,17 +64,26 @@ eof
     endif
 endfunc
 
-function! s:buf_read_callback()
+function! s:vim_enter_callback()
+    for f in argv()
+        py3 update_file(vim.eval('f'))
+    endfor
+endfunc
+
+function! s:buf_add_callback()
+    py3 update_file(vim.eval('expand("<afile>")'))
+endfunc
+
+function! s:file_type_callback()
     setlocal omnifunc=CComplete
-    py3 update_file(vim.eval('expand("%:p")'))
 endfunc
 
 function! s:buf_write_callback()
-    py3 update_file(vim.eval('expand("%:p")'))
+    py3 update_file(vim.eval('expand("<afile>")'))
 endfunc
 
 function! s:buf_delete_callback()
-    py3 remove_file(vim.eval('expand("%:p")'))
+    py3 remove_file(vim.eval('expand("<afile>")'))
 endfunc
 
 function! SetIncludeList(...)
@@ -91,7 +100,9 @@ function! SetIncludeList(...)
 endfunc
 
 aug C_COMPLETE
-    au BufReadPost *.[ch] call s:buf_read_callback()
+    au VimEnter *.[ch] call s:vim_enter_callback()
+    au BufAdd *.[ch] call s:buf_add_callback()
+    au FileType c call s:file_type_callback()
     au BufWritePost *.[ch] call s:buf_write_callback()
     au BufDelete *.[ch] call s:buf_delete_callback()
 aug END

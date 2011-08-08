@@ -57,10 +57,10 @@ def set_include_list(inclist):
     global CTAGS_CACHE
     CTAGS_CACHE = CtagsCache(inclist)
     for b in vim.buffers:
-        if not b.name or len(b.name) < 3:
+        if not b.name:
             continue
 
-        if b.name[-2:] != '.c' and b.name[-2:] != '.h':
+        if not b.name.endswith('.c') and not b.name.endswith('.h'):
             continue
 
         if not int(vim.eval("buflisted('" + b.name + "')")):
@@ -218,9 +218,6 @@ def get_local_vars(name_prefix, match_whole = 0):
 
     return res
 
-def get_global_symbols(name_prefix):
-    return CTAGS_CACHE.find_tags(name_prefix)
-
 def find_typeref_of_typedef(typedef):
     """
     translate typedefed type to original typeref.
@@ -291,7 +288,6 @@ def find_completion_matches(completion, base):
         last_component_start = 0
         for part in it:
             tags = None
-            anon_struct = 0
             if not last_struct:
                 tags = [ t for t in get_local_vars(part.group(1), 1) if 'typeref' in t ]
                 if not tags:
@@ -333,9 +329,9 @@ def find_completion_matches(completion, base):
 
     else:
         lvars = get_local_vars(base)
-        gsyms = [ s for s in get_global_symbols(base) if s['kind'] in 'defpv' ]
-        gsyms = [ s for s in gsyms if not (s['kind'] == 'p'
-                  and ('struct' in s or 'union' in s)) ]
+        gsyms = CTAGS_CACHE.find_tags(base)
+        gsyms = [ s for s in gsyms if s['kind'] in 'defgtspuv'
+                  and not (s['kind'] == 'p' and ('struct' in s or 'union' in s)) ]
 
         return lvars + gsyms
 

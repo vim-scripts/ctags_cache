@@ -88,6 +88,9 @@ class CtagsCache:
 
     def _update_file(self, path):
         path = os.path.realpath(path)
+        if not os.access(path, os.R_OK):
+            return
+
         node = self._file_container.get(path, 1)
         if node.refcount <= 0:
             node.refcount = 1

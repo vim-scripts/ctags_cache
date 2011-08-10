@@ -1,4 +1,4 @@
 repo: 811dc296157d634bc13642b9013662d0673ffaf4
-node: c6026aea2d2f0254977d46ecb858671f7d8855bb
+node: aefcd3d0bb89698ee2962b334e67dc2b72855372
 branch: default
-tag: v1.0.3
+tag: v1.0.4

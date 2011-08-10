@@ -36,7 +36,7 @@ class FileNode():
             return
 
         path_prefix = os.path.dirname(self.path)
-        with open(self.path, 'r', encoding = "utf-8") as fobj:
+        with open(self.path, 'r', encoding = "ascii", errors='ignore') as fobj:
             for line in fobj:
                 ret = self._include_regexp.match(line)
                 if not ret:

@@ -198,13 +198,11 @@ def get_local_vars(name_prefix, match_whole = 0):
             if line_is_end(line):
                 # now we got a complete statements.
                 st_ind_lev = line_indent_level(statements)
-                if scope_ind_lev < st_ind_lev:
-                    continue
+                if scope_ind_lev >= st_ind_lev:
+                    for var in var_names(statements):
+                        if matcher(var['name']) and var not in res:
+                            res.append(var)
 
-                for var in var_names(statements):
-                    if matcher(var['name']) and var not in res:
-                        res.append(var)
-                
                 statements = ''
 
         if scope_ind_lev == 1:
@@ -282,7 +280,10 @@ def is_not_member_of_named_child_struct(tag, struct_name, struct_tags):
     return 1
 
 def find_completion_matches(completion, base):
-    if completion != base:
+    if not completion:
+        return []
+
+    elif completion != base:
         it = COMPLETION_COMPONENT_RE_OBJ.finditer(completion)
         last_struct = ''
         last_component_start = 0

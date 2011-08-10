@@ -102,7 +102,7 @@ endfunc
 aug C_COMPLETE
     au VimEnter *.[ch] call s:vim_enter_callback()
     au BufAdd *.[ch] call s:buf_add_callback()
-    au FileType c call s:file_type_callback()
+    au FileType c,cpp call s:file_type_callback()
     au BufWritePost *.[ch] call s:buf_write_callback()
     au BufDelete *.[ch] call s:buf_delete_callback()
 aug END

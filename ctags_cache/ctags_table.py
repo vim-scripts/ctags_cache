@@ -68,37 +68,29 @@ class CtagsTable:
 
     def __init__(self):
         self._tag_list = []
-        self._file_list = []
+        self._file_dict = {}
 
     def tags(self):
         return len(self._tag_list)
 
     def files(self):
-        return len(self._file_list)
+        return len(self._file_dict)
 
     def delete(self, file_list):
         deleted_tags = 0
-        deleted_files = 0
         for path in file_list:
-            matcher = make_search_matcher('path', path, lambda x, y: x == y)
-            idx = binary_search(self._file_list, matcher)
-            if idx == None:
+            if path not in self._file_dict:
                 continue
 
-            for tag in self._file_list[idx]['tags']:
+            for tag in self._file_dict[path]:
                 tag['name'] = '\255'
                 deleted_tags += 1
 
-            self._file_list[idx]['path'] = '\255'
-            deleted_files += 1
+            del self._file_dict[path]
 
         if deleted_tags:
             self._tag_list.sort(key = lambda x: x['name'])
             self._tag_list[-deleted_tags:] = []
-
-        if deleted_files:
-            self._file_list.sort(key = lambda x: x['path'])
-            self._file_list[-deleted_files:] = []
 
     def add(self, file_list):
         p = subprocess.Popen(CTAGS_CMD, shell = True, stdin = subprocess.PIPE, 
@@ -106,23 +98,22 @@ class CtagsTable:
         p.stdin.write('\n'.join(file_list).encode('utf-8'))
         p.stdin.close()
 
-        f = None
+        path = ''
+        tags = None
         for line in p.stdout:
             ret = parse_ctags_line(line.decode('utf-8'))
             self._tag_list.append(ret)
 
-            if not f or f['path'] != ret['path']:
-                f = {}
-                f['path'] = ret['path']
-                f['tags'] = []
-                self._file_list.append(f)
+            if not path or path != ret['path']:
+                path = ret['path']
+                tags = []
+                self._file_dict[path] = tags
 
-            f['tags'].append(ret)
+            tags.append(ret)
 
         p.stdout.close()
 
         self._tag_list.sort(key = lambda x: x['name'])
-        self._file_list.sort(key = lambda x: x['path'])
 
     def find(self, name_prefix, match_whole):
         if not match_whole:

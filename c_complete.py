@@ -89,7 +89,7 @@ def line_is_end(line):
         return 0
 
 def line_indent_level(line):
-    tab_stop = int(vim.eval("&softtabstop"))
+    tab_stop = int(vim.eval("&tabstop"))
     shift_width = int(vim.eval("&shiftwidth"))
     prefix_space = 0
     for i in range(0, len(line)):

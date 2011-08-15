@@ -12,7 +12,7 @@ It is excellent, isn't it? The story is not end, thanks to python, the plugin us
 
 Command
 
-:SetIncludeList path-of-include-dir1 path-of_include-dir2 ...
+:SetIncludeList path-of-include-dir1 path-of-include-dir2 ...
 
 :SetIncludeList
 

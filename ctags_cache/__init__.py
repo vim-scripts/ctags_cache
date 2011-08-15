@@ -5,7 +5,7 @@ __all__ = ['CtagsCache']
 import os
 import threading
 
-from .file_node import FileContainer
+from .file_node import FileNode
 from .ctags_table import CtagsTable
 
 class CtagsCacheWorker(threading.Thread):
@@ -35,54 +35,65 @@ class CtagsCacheWorker(threading.Thread):
 class CtagsCache:
 
     def __init__(self, inclist = []):
-        self._file_container = FileContainer()
-        self._ctags_table = CtagsTable()
-        self._set_include_list(inclist)
-
         self._worker = CtagsCacheWorker()
+        self._file_nodes = {}
+        self._ctags_table = CtagsTable()
+        self._init_inc_list(inclist)
 
-    def _set_include_list(self, inclist):
-        self._include_list = []
-        for incpath in inclist:
-            incpath = os.path.realpath(incpath)
-            if incpath not in self._include_list:
-                self._include_list.append(incpath)
+    def _init_inc_list(self, inclist):
+        self._inc_list = []
+        for path in inclist:
+            path = os.path.realpath(path)
+            if path not in self._inc_list:
+                self._inc_list.append(path)
+
+    def _get_node(self, path, create_new = 0):
+        node = None
+        if path in self._file_nodes:
+            node = self._file_nodes[path]
+        elif create_new:
+            node = FileNode(path, self._inc_list)
+            self._file_nodes[path] = node
+
+        return node
 
     def _add_file_recursively(self, path):
-        node = self._file_container.get(path, 1)
+        node = self._get_node(path, 1)
         if node.refcount <= 0:
             node.refcount = 1
             node.check_loop = 1
 
             new_files = [path]
-            for f in node.header_files(self._include_list):
-                dep_node, new_dep_files = self._add_file_recursively(f)
-                node.depends.append(dep_node)
-                new_files += new_dep_files
+            for f in node.depends:
+                new_files += self._add_file_recursively(f)
 
             node.check_loop = 0
-            return node, new_files
-
+            return new_files
         elif not node.check_loop:
             node.refcount += 1
-            return node, []
-
+            return []
         else:
-            return node, []
+            return []
 
-    def _remove_file_recursively(self, node):
+    def _remove_file_recursively(self, path):
+        node = self._get_node(path)
+        if not node:
+            return []
+
         if node.refcount == 0:
+            # impossible!
+            print("what the fuck?!")
             return []
         elif node.refcount > 1:
             node.refcount -= 1
             return []
 
         node.refcount = 0
-        self._file_container.remove(node)
+        del self._file_nodes[path]
 
-        obsolete_files =[node.path]
-        for n in node.depends:
-            obsolete_files += self._remove_file_recursively(n)
+        obsolete_files = [path]
+        for f in node.depends:
+            obsolete_files += self._remove_file_recursively(f)
 
         return obsolete_files
 
@@ -91,50 +102,43 @@ class CtagsCache:
         if not os.access(path, os.R_OK):
             return
 
-        node = self._file_container.get(path, 1)
+        node = self._get_node(path, 1)
         if node.refcount <= 0:
+            # a new node.
             node.refcount = 1
+            new_deps = node.depends
+            obsolete_deps = []
+        else:
+            old_depends = node.depends
+            node.renew_depends(self._inc_list)
+            new_deps = node.depends - old_depends
+            obsolete_deps = old_depends - node.depends
 
         node.check_loop = 1
 
-        new_depends = []
         new_files = [path]
-        for f in node.header_files(self._include_list):
-            dep_node = None
-            for n in node.depends:
-                if n.path == f:
-                    dep_node = n
-                    break
-
-            if not dep_node:
-                dep_node, new_dep_files = self._add_file_recursively(f)
-                new_files += new_dep_files
-
-            new_depends.append(dep_node)
-
-        obsolete_files = [path]
-        for old_node in node.depends:
-            if old_node not in new_depends:
-                obsolete_files += self._remove_file_recursively(old_node)
+        for f in new_deps:
+            new_files += self._add_file_recursively(f)
 
         node.check_loop = 0
-        node.depends = new_depends
+
+        obsolete_files = [path]
+        for f in obsolete_deps:
+            obsolete_files += self._remove_file_recursively(f)
 
         self._ctags_table.delete(obsolete_files)
         self._ctags_table.add(new_files)
+
+    def _remove_file(self, path):
+        path = os.path.realpath(path)
+        obsolete_files = self._remove_file_recursively(path)
+        self._ctags_table.delete(obsolete_files)
 
     def update_file(self, path):
         def run_func():
             self._update_file(path)
 
         self._worker.work(run_func)
-
-    def _remove_file(self, path):
-        path = os.path.realpath(path)
-        node = self._file_container.get(path)
-        if node:
-            obsolete_files = self._remove_file_recursively(node)
-            self._ctags_table.delete(obsolete_files)
 
     def remove_file(self, path):
         def run_func():
@@ -153,5 +157,7 @@ class CtagsCache:
         return res
 
     def printall(self):
-        print('files:', self._file_container.size(), 'tags:', self._ctags_table.tags())
+        print('file nodes:', len(self._file_nodes),
+              'files:', self._ctags_table.files(),
+              'tags:', self._ctags_table.tags())
 

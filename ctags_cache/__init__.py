@@ -134,15 +134,17 @@ class CtagsCache:
         obsolete_files = self._remove_file_recursively(path)
         self._ctags_table.delete(obsolete_files)
 
-    def update_file(self, path):
+    def update_files(self, pathes):
         def run_func():
-            self._update_file(path)
+            for path in pathes:
+                self._update_file(path)
 
         self._worker.work(run_func)
 
-    def remove_file(self, path):
+    def remove_files(self, pathes):
         def run_func():
-            self._remove_file(path)
+            for path in pathes:
+                self._remove_file(path)
 
         self._worker.work(run_func)
 

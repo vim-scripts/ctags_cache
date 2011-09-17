@@ -6,8 +6,8 @@ import vim
 from ctags_cache import CtagsCache
 
 __all__ = [
-    'update_file',
-    'remove_file', 
+    'update_files',
+    'remove_files', 
     'set_include_list',
     'find_completion_start',
     'find_completion_matches',
@@ -18,27 +18,31 @@ COMPLETION_RE_OBJ = re.compile(r"(?:\w+\s*(?:\[.*\])*\s*(?:\.|->)\s*)*(\w*)$")
 COMPLETION_COMPONENT_RE_OBJ = re.compile(r"(\w+)\s*(?:\[.*\])*\s*(?:\.|->)\s*")
 
 FUNCTION_RE_OBJ = re.compile(r"""(?:static\s+)?
+                                 (?:inline\s+)?
                                  (?:const\s+)?
-                                 (?:(?:struct|union|enum)\s+)?
-                                 \w+                           # return type
-                                 [\s\*]+\w+\s*                 # function name
+                                 (?:(?:(?:struct|union|enum)\s+)|
+                                    (?:\w+\s+)*)?
+                                 \w+
+                                 [\s\*]+(?:const\s+)?\w+\s*       # function name
                                  \((.*)\)""",
                              re.X|re.S)
 
 ARGUMENT_RE_OBJ = re.compile(r"""(?:const\s+)?
-                                 (?:(struct|union|enum|(?:(?:signed|unsigned)(?:\s+long)?))\s+)?
-                                 (\w+)                                       # variable type
-                                 [\s\*]+(?:const\s+)?(\w+)\s*""",            # variable name
+                                 (?:(?:(struct|union|enum)\s+)|
+                                    (?:\w+\s+)*)?
+                                 (\w+)
+                                 [\s\*]+(?:const\s+)?(\w+)\s*""", # argument name
                              re.X|re.S)
 
 VARIABLE_RE_OBJ = re.compile(r"""(?:static\s+)?
                                  (?:const\s+)?
-                                 (?:(struct|union|enum|(?:(?:signed|unsigned)(?:\s+long)?))\s+)?
-                                 (\w+)                                       # variable type
-                                 ([\s\*]+(?:const\s+)?\w+\s*                 # variable name
-                                  (?:\[.*\]\s*)*                             # is it an array?
-                                  (?:=[^;]*)?                                # may have initial value.
-                                  (?:,                                       # multiply variables definition.
+                                 (?:(?:(struct|union|enum)\s+)|
+                                    (?:\w+\s+)*)?
+                                 (\w+)
+                                 ([\s\*]+(?:const\s+)?\w+\s*      # variable name
+                                  (?:\[.*\]\s*)*                  # is it an array?
+                                  (?:=[^;]*)?                     # may have initial value.
+                                  (?:,                            # multiply variables definition.
                                      [\s\*]*(?:const\s+)?\w+\s*
                                      (?:\[.*\]\s*)*
                                      (?:=[^;]*)?)*)
@@ -47,15 +51,17 @@ VARIABLE_RE_OBJ = re.compile(r"""(?:static\s+)?
 
 CTAGS_CACHE = CtagsCache()
 
-def update_file(fname):
-    CTAGS_CACHE.update_file(fname)
+def update_files(files):
+    CTAGS_CACHE.update_files(files)
 
-def remove_file(fname):
-    CTAGS_CACHE.remove_file(fname)
+def remove_files(files):
+    CTAGS_CACHE.remove_files(files)
 
 def set_include_list(inclist):
     global CTAGS_CACHE
     CTAGS_CACHE = CtagsCache(inclist)
+
+    files = []
     for b in vim.buffers:
         if not b.name:
             continue
@@ -66,7 +72,9 @@ def set_include_list(inclist):
         if not int(vim.eval("buflisted('" + b.name + "')")):
             continue
 
-        CTAGS_CACHE.update_file(b.name)
+        files.append(b.name)
+
+    CTAGS_CACHE.update_files(files)
 
 def find_completion_start():
     row, col = vim.current.window.cursor
@@ -126,11 +134,10 @@ def var_names(statements):
     it = VARIABLE_RE_OBJ.finditer(statements)
     for st in it:
         typename = ''
-        if st.group(2) not in C_TYPES:
-            if st.group(1):
-                typename = st.group(1) + ':' + st.group(2)
-            else:
-                typename = st.group(2)
+        if st.group(1):
+            typename = st.group(1) + ':' + st.group(2)
+        elif st.group(2) not in C_TYPES:
+            typename = st.group(2)
 
         for var in split_var_names(st.group(3)):
             if typename:
@@ -147,11 +154,10 @@ def arg_names(row, col):
             it = ARGUMENT_RE_OBJ.finditer(func.group(1))
             for arg in it:
                 tag = {'name': arg.group(3)}
-                if arg.group(2) not in C_TYPES:
-                    if arg.group(1):
-                        tag['typeref'] = arg.group(1) + ':' + arg.group(2)
-                    else:
-                        tag['typeref'] = arg.group(2)
+                if arg.group(1):
+                    tag['typeref'] = arg.group(1) + ':' + arg.group(2)
+                elif arg.group(2) not in C_TYPES:
+                    tag['typeref'] = arg.group(2)
                     
                 yield tag
 

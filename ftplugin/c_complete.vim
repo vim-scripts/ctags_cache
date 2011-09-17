@@ -65,13 +65,18 @@ eof
 endfunc
 
 function! s:vim_enter_callback()
+    let files = []
     for f in argv()
-        py3 update_file(vim.eval('f'))
+        if fnamemodify(f, ':e') == 'c' || fnamemodify(f, ':e') == 'h'
+            call add(files, f)
+        endif
     endfor
+
+    py3 update_files(vim.eval('files'))
 endfunc
 
 function! s:buf_add_callback()
-    py3 update_file(vim.eval('expand("<afile>")'))
+    py3 update_files([vim.eval('expand("<afile>")')])
 endfunc
 
 function! s:file_type_callback()
@@ -79,20 +84,22 @@ function! s:file_type_callback()
 endfunc
 
 function! s:buf_write_callback()
-    py3 update_file(vim.eval('expand("<afile>")'))
+    py3 update_files([vim.eval('expand("<afile>")')])
 endfunc
 
 function! s:buf_delete_callback()
-    py3 remove_file(vim.eval('expand("<afile>")'))
+    py3 remove_files([vim.eval('expand("<afile>")')])
 endfunc
 
 function! SetIncludeList(...)
     let inclist = []
     for pat in a:000
         for incpath in split(glob(pat), "\n")
-            if isdirectory(incpath)
-                call add(inclist, incpath)
+            if !isdirectory(incpath)
+                continue
             endif
+
+            call add(inclist, incpath)
         endfor
     endfor
 
@@ -100,7 +107,7 @@ function! SetIncludeList(...)
 endfunc
 
 aug C_COMPLETE
-    au VimEnter *.[ch] call s:vim_enter_callback()
+    au VimEnter * call s:vim_enter_callback()
     au BufAdd *.[ch] call s:buf_add_callback()
     au FileType c,cpp call s:file_type_callback()
     au BufWritePost *.[ch] call s:buf_write_callback()

@@ -31,7 +31,6 @@ import timeit
 cb_header = r"""
 import ctags_cache
 cache = ctags_cache.CtagsCache(['/home/lfw/works/linux-2.6/include', 'linux-2.6'])
-cache.printall()
 """
 
 cb_body = "print(cache.find_tags('romfs_mtd'))"

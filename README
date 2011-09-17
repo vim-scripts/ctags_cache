@@ -1,6 +1,6 @@
 This is a mirror of http://www.vim.org/scripts/script.php?script_id=3684
 
-project on bitbucket: http://bitbucket.org/abadcafe/ctags_cache/
+project on github.com: https://github.com/abadcafe/ctags_cache
 
 ctags_cache is a vim plugin which can generate tags for C language uses ctags, then cache the tags in memory.
 

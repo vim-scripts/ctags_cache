@@ -1,28 +1,10 @@
 #!/usr/bin/env python
 
-import re
 import os
-
-FILE_TYPES = [
-    {
-        'suffix': r'\.[ch]$',
-        'include': r'^\s*#\s*include\s+(\"|\<)\s*([\w\.\/]+)\s*(?:\"|\>)\s*$'
-    },
-]
-
-for ft in FILE_TYPES:
-    ft['suffix_regexp'] = re.compile(ft['suffix'])
-    ft['include_regexp'] = re.compile(ft['include'])
 
 class FileNode:
 
     def __init__(self, path, inclist = []):
-        self._include_regexp = None
-        for ft in FILE_TYPES:
-            if ft['suffix_regexp'].search(path):
-                self._include_regexp = ft['include_regexp']
-                break
-
         self.path = path
         self.refcount = 0
         self.check_loop = 0
@@ -34,26 +16,46 @@ class FileNode:
         return self.path
 
     def _header_files(self, inclist):
-        if not self._include_regexp:
-            return
-
         path_prefix = os.path.dirname(self.path)
         with open(self.path, 'r', encoding = "ascii", errors='ignore') as fobj:
             for line in fobj:
-                ret = self._include_regexp.match(line)
-                if not ret:
+                line = line.lstrip()
+                if not line.startswith("#"):
+                    continue
+
+                # skip "#" and space.
+                line = line[1:].lstrip()
+                if not line.startswith('include'):
+                    continue
+
+                # skip "include" and space.
+                line = line[7:].lstrip()
+                if not line:
                     continue
 
                 if path_prefix in inclist:
                     inclist.remove(path_prefix)
 
-                if ret.group(1) == '"':
+                if line[0] == '"':
+                    endchar = '"'
                     inclist.insert(0, path_prefix)
-                else:
+                elif line[0] == '<':
+                    endchar = '>'
                     inclist.append(path_prefix)
+                else:
+                    continue
+
+                end = line.find(endchar, 1)
+                if end < 0:
+                    continue
+
+                # strip '"', '<>', and space.
+                line = line[1:end].strip()
+                if not line:
+                    continue
 
                 for incpath in inclist:
-                    path = os.path.join(incpath, ret.group(2))
+                    path = os.path.join(incpath, line)
                     if os.access(path, os.R_OK):
                         yield path
                         break

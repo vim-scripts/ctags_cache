@@ -5,7 +5,7 @@ __all__ = ['CtagsCache']
 import os
 import threading
 
-from .file_node import FileNode
+from .file_node import get_file_class
 from .ctags_table import CtagsTable
 
 class CtagsCacheWorker(threading.Thread):
@@ -13,32 +13,72 @@ class CtagsCacheWorker(threading.Thread):
     def __init__(self):
         threading.Thread.__init__(self)
         self.daemon = True
-        self._run_cond = threading.Condition()
-        self._run_func = None
+        self._works_cond = threading.Condition()
+        self._works = []
+        self._barrier = 0
         self.start()
 
-    def work(self, func, wait_complete = 0):
-        with self._run_cond:
-            self._run_func = func
-            self._run_cond.notify()
-            if wait_complete:
-                self._run_cond.wait_for(lambda: self._run_func == None)
+    def add_work(self, new):
+        with self._works_cond:
+            if new['op'] == 'wait_all_complete':
+                self._barrier = 1
+                self._works.append(new)
+                self._works_cond.notify()
+                self._works_cond.wait_for(lambda: not self._barrier)
+
+            else:
+                dup = None
+                for w in self._works:
+                    if w['target'] != new['target']:
+                        continue
+
+                    elif (new['op'] == 'add' and w['op'] == 'remove') or \
+                         (new['op'] == 'remove' and w['op'] == 'add') or \
+                         (new['op'] == 'update' and w['op'] == 'update'):
+                        dup = w
+
+                if dup:
+                    self._works.remove(dup)
+                else:
+                    self._works.append(new)
+
+                self._works_cond.notify()
 
     def run(self):
-        with self._run_cond:
-            while 1:
-                self._run_cond.wait_for(lambda: self._run_func)
-                self._run_func()
-                self._run_func = None
-                self._run_cond.notify()
+        while 1:
+            with self._works_cond:
+                self._works_cond.wait_for(lambda: self._works)
+
+                work = None
+                if self._barrier:
+                    for w in self._works:
+                        w['run']()
+
+                    self._works = []
+                    self._barrier = 0
+
+                else:
+                    work = self._works.pop(0)
+
+                self._works_cond.notify()
+
+            if work:
+                work['run']()
+
+class FileTypeError(Exception):
+    pass
 
 class CtagsCache:
 
-    def __init__(self, inclist = []):
+    def __init__(self, filetype, inclist = []):
         self._worker = CtagsCacheWorker()
         self._file_nodes = {}
         self._ctags_table = CtagsTable()
         self._init_inc_list(inclist)
+        self._file_class = get_file_class(filetype)
+
+        if not self._file_class:
+            raise FileTypeError
 
     def _init_inc_list(self, inclist):
         self._inc_list = []
@@ -52,7 +92,7 @@ class CtagsCache:
         if path in self._file_nodes:
             node = self._file_nodes[path]
         elif create_new:
-            node = FileNode(path, self._inc_list)
+            node = self._file_class(path, self._inc_list)
             self._file_nodes[path] = node
 
         return node
@@ -97,22 +137,43 @@ class CtagsCache:
 
         return obsolete_files
 
-    def _update_file(self, path):
+    def _add_file(self, path):
         path = os.path.realpath(path)
         if not os.access(path, os.R_OK):
             return
 
         node = self._get_node(path, 1)
-        if node.refcount <= 0:
-            # a new node.
-            node.refcount = 1
-            new_deps = node.depends
-            obsolete_deps = []
-        else:
-            old_depends = node.depends
-            node.renew_depends(self._inc_list)
-            new_deps = node.depends - old_depends
-            obsolete_deps = old_depends - node.depends
+        if node.refcount > 0:
+            node.refcount += 1
+            return
+
+        # a new node.
+        node.refcount = 1
+        new_deps = node.depends
+
+        node.check_loop = 1
+
+        new_files = [path]
+        for f in new_deps:
+            new_files += self._add_file_recursively(f)
+
+        node.check_loop = 0
+
+        self._ctags_table.add(new_files)
+
+    def _update_file(self, path):
+        path = os.path.realpath(path)
+        if not os.access(path, os.R_OK):
+            return
+
+        node = self._get_node(path)
+        if not node:
+            return
+
+        old_depends = node.depends
+        node.renew_depends(self._inc_list)
+        new_deps = node.depends - old_depends
+        obsolete_deps = old_depends - node.depends
 
         node.check_loop = 1
 
@@ -134,27 +195,54 @@ class CtagsCache:
         obsolete_files = self._remove_file_recursively(path)
         self._ctags_table.delete(obsolete_files)
 
+    def add_files(self, pathes):
+        def run_func():
+            for path in pathes:
+                self._add_file(path)
+
+        work = {}
+        work["op"] = 'add'
+        work['target'] = pathes
+        work['run'] = run_func
+        
+        self._worker.add_work(work)
+
     def update_files(self, pathes):
         def run_func():
             for path in pathes:
                 self._update_file(path)
 
-        self._worker.work(run_func)
+        work = {}
+        work["op"] = 'update'
+        work['target'] = pathes
+        work['run'] = run_func
+
+        self._worker.add_work(work)
 
     def remove_files(self, pathes):
         def run_func():
             for path in pathes:
                 self._remove_file(path)
 
-        self._worker.work(run_func)
+        work = {}
+        work["op"] = 'remove'
+        work['target'] = pathes
+        work['run'] = run_func
+
+        self._worker.add_work(run_func)
 
     def find_tags(self, name_prefix, match_whole = 0):
-        res = []
+        res = None
         def run_func():
             nonlocal res
             res = self._ctags_table.find(name_prefix, match_whole)
+
+        work = {}
+        work["op"] = 'wait_all_complete'
+        work['target'] = None
+        work['run'] = run_func
         
-        self._worker.work(run_func, 1)
+        self._worker.add_work(work)
 
         return res
 

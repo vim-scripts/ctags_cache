@@ -20,6 +20,7 @@ let loaded_c_complete = 1
 
 py3 << eof
 import os
+import vim
 path = os.path.dirname(vim.eval("expand('<sfile>')"))
 
 import sys
@@ -72,11 +73,11 @@ function! s:vim_enter_callback()
         endif
     endfor
 
-    py3 update_files(vim.eval('files'))
+    py3 add_files(vim.eval('files'))
 endfunc
 
 function! s:buf_add_callback()
-    py3 update_files([vim.eval('expand("<afile>")')])
+    py3 add_files([vim.eval('expand("<afile>")')])
 endfunc
 
 function! s:file_type_callback()
@@ -91,7 +92,7 @@ function! s:buf_delete_callback()
     py3 remove_files([vim.eval('expand("<afile>")')])
 endfunc
 
-function! SetIncludeList(...)
+function! s:set_include_list(...)
     let inclist = []
     for pat in a:000
         for incpath in split(glob(pat), "\n")
@@ -115,6 +116,6 @@ aug C_COMPLETE
 aug END
 
 if !exists(":SetIncludeList")
-    command -nargs=* -complete=dir SetIncludeList :call SetIncludeList(<f-args>)
+    command -nargs=* -complete=dir SetIncludeList :call <SID>set_include_list(<f-args>)
 endif
 

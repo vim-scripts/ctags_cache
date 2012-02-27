@@ -2,7 +2,7 @@
 
 import os
 
-class FileNode:
+class CFileNode:
 
     def __init__(self, path, inclist = []):
         self.path = path
@@ -17,7 +17,7 @@ class FileNode:
 
     def _header_files(self, inclist):
         path_prefix = os.path.dirname(self.path)
-        with open(self.path, 'r', encoding = "ascii", errors='ignore') as fobj:
+        with open(self.path, 'r', buffering = 131072, encoding = "ascii", errors='ignore') as fobj:
             for line in fobj:
                 line = line.lstrip()
                 if not line.startswith("#"):
@@ -63,7 +63,19 @@ class FileNode:
     def renew_depends(self, inclist = []):
         self.depends = frozenset(self._header_files(inclist))
 
+def get_file_class(file_type):
+    if file_type == 'c':
+        return CFileNode;
+    else:
+        return None
+
 if __name__ == "__main__":
-    for f in FileNode('../test/test.c').depends:
+    import sys
+
+    if len(sys.argv) != 2:
+        print("need arg.")
+        exit()
+
+    for f in CFileNode(sys.argv[1]).depends:
         print(f)
 
